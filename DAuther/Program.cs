@@ -24,7 +24,17 @@
             string CMAC = GenerateCMACOfRequestString(KEK, BaseRequest);
             byte[] PostFinal = PostAuthToken(BaseRequest, CMAC);
             string FinalReq = MakeReq(DeviceAuthTokenURL, PostFinal);
-            Console.WriteLine(FinalReq);
+            JObject ParseFinal = JObject.Parse(FinalReq);
+            try
+            {
+                Console.WriteLine("Expires in " + ParseJSON["expires_in"].ToString() + " seconds.");
+                Console.WriteLine("Auth token:" + ParseJSON["device_auth_token"].ToString());
+                System.IO.File.WriteAllText("device_auth_token.txt", FinalReq);
+            }
+            catch (Exception)
+            {
+                Console.WriteLine(FinalReq);
+            }          
         }
     }
 }

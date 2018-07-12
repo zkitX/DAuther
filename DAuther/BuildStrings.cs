@@ -19,20 +19,28 @@ namespace DAuther
         }
         public static string MakeReq(string URL, byte[] PostData)
         {
-            ServicePointManager.ServerCertificateValidationCallback = AcceptAllCertifications;
-            X509Certificate2 Cert = new X509Certificate2("nx_tls_client_cert.pfx", "switch");
-            HttpWebRequest Request = (HttpWebRequest)WebRequest.Create(URL);
-            Request.ClientCertificates.Add(Cert);
-            Request.UserAgent = "libcurl (nnDauth; 789f928b-138e-4b2f-afeb-1acae821d897; SDK 5.3.0.0; Add-on 5.3.0.0)";
-            Request.Method = "POST";
-            Stream DataStream = Request.GetRequestStream();
-            DataStream.Write(PostData, 0, PostData.Length);
-            DataStream.Close();
-            WebResponse Response = Request.GetResponse();
-            DataStream = Response.GetResponseStream();
-            StreamReader Reader = new StreamReader(DataStream);
-            string ResponseContent = Reader.ReadToEnd();
-            return ResponseContent;
+            try
+            {
+                ServicePointManager.ServerCertificateValidationCallback = AcceptAllCertifications;
+                X509Certificate2 Cert = new X509Certificate2("nx_tls_client_cert.pfx", "switch");
+                HttpWebRequest Request = (HttpWebRequest)WebRequest.Create(URL);
+                Request.ClientCertificates.Add(Cert);
+                Request.UserAgent = "libcurl (nnDauth; 789f928b-138e-4b2f-afeb-1acae821d897; SDK 5.3.0.0; Add-on 5.3.0.0)";
+                Request.Accept = "*/*";
+                Request.Method = "POST";
+                Stream DataStream = Request.GetRequestStream();
+                DataStream.Write(PostData, 0, PostData.Length);
+                DataStream.Close();
+                WebResponse Response = Request.GetResponse();
+                DataStream = Response.GetResponseStream();
+                StreamReader Reader = new StreamReader(DataStream);
+                string ResponseContent = Reader.ReadToEnd();
+                return ResponseContent;
+            }
+            catch (WebException ex) {
+                var resp = new StreamReader(ex.Response.GetResponseStream()).ReadToEnd();
+                return resp;
+            }
         }
         public static byte[] Decrypt(byte[] Data, byte[] Key)
         {
@@ -64,7 +72,7 @@ namespace DAuther
         public static string GenerateCMACOfRequestString(byte[] Key, string RequestData)
         {
             byte[] CMAC = GenAESCMAC.AESCMAC(Key, Encoding.UTF8.GetBytes(RequestData));
-            string base64 = System.Convert.ToBase64String(CMAC).Replace('+', '-').Replace('/', '_').Replace("==","=");
+            string base64 = System.Convert.ToBase64String(CMAC).Replace('+', '-').Replace('/', '_').Replace("=","");
             return base64;
         }
         public static byte[] PostAuthToken(string Data, string MAC)
