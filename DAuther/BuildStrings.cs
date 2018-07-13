@@ -1,18 +1,27 @@
 ﻿using System.Security.Cryptography;
-using System;
 using System.Text;
 using System.Security.Cryptography.X509Certificates;
 using System.Net;
 using System.IO;
+using System;
 
 namespace DAuther
 {
     class BuildStrings
     {
+        public static string URLSafe(string Str)
+        {
+            return Str.Replace("+", "-").Replace("/", "_").Replace("=","");
+        }
         public static byte[] MasterKey = { 0xCF, 0xA2, 0x17, 0x67, 0x90, 0xA5, 0x3F, 0xF7, 0x49, 0x74, 0xBF, 0xF2, 0xAF, 0x18, 0x09, 0x21 };
-        public static byte[] AESUsecaseSeed = { 0x4D, 0x87, 0x09, 0x86, 0xC4, 0x5D, 0x20, 0x72, 0x2F, 0xBA, 0x10, 0x53, 0xDA, 0x92, 0xE8, 0xA9 };
+        public static byte[] AESUseSrc = { 0x4D, 0x87, 0x09, 0x86, 0xC4, 0x5D, 0x20, 0x72, 0x2F, 0xBA, 0x10, 0x53, 0xDA, 0x92, 0xE8, 0xA9 };
         public static byte[] DAuth_KEK = { 0x8B, 0xE4, 0x5A, 0xBC, 0xF9, 0x87, 0x02, 0x15, 0x23, 0xCA, 0x4F, 0x5E, 0x23, 0x00, 0xDB, 0xF0 };
-        public static byte[] DataSrc = { 0xDE, 0xD2, 0x4C, 0x35, 0xA5, 0xD8, 0xC0, 0xD7, 0x6C, 0xB8, 0xD7, 0x8C, 0xA0, 0xA5, 0xA5, 0x22 };
+        public static byte[] DAuth_Src = { 0xDE, 0xD2, 0x4C, 0x35, 0xA5, 0xD8, 0xC0, 0xD7, 0x6C, 0xB8, 0xD7, 0x8C, 0xA0, 0xA5, 0xA5, 0x22 };
+        public static string Client_ID_NIM = "93af0acb26258de9";
+        public static string UserAgent = string.Format("libcurl (nnDauth; {0}; SDK {1}.{2}.{3}.{4}; Add-on {1}.{2}.{3}.{4})", "789f928b-138e-4b2f-afeb-1acae821d897", 5, 3, 0, 0);
+        public static string Challenge = string.Format("key_generation={0}", 5);
+        public static string SysDigest = "gW93A#00050100#29uVhARHOdeTZmfdPnP785egrfRbPUW5n3IAACuHoPw=";
+        public static X509Certificate2 Cert = new X509Certificate2("nx_tls_client_cert.pfx", "switch");
         public static bool AcceptAllCertifications(object Input, X509Certificate Cert, X509Chain Chain, System.Net.Security.SslPolicyErrors Err)
         {
             return true;
@@ -22,64 +31,52 @@ namespace DAuther
             try
             {
                 ServicePointManager.ServerCertificateValidationCallback = AcceptAllCertifications;
-                X509Certificate2 Cert = new X509Certificate2("nx_tls_client_cert.pfx", "switch");
                 HttpWebRequest Request = (HttpWebRequest)WebRequest.Create(URL);
                 Request.ClientCertificates.Add(Cert);
-                Request.UserAgent = "libcurl (nnDauth; 789f928b-138e-4b2f-afeb-1acae821d897; SDK 5.3.0.0; Add-on 5.3.0.0)";
+                Request.UserAgent = UserAgent;
                 Request.Accept = "*/*";
                 Request.Method = "POST";
                 Stream DataStream = Request.GetRequestStream();
                 DataStream.Write(PostData, 0, PostData.Length);
                 DataStream.Close();
                 WebResponse Response = Request.GetResponse();
-                DataStream = Response.GetResponseStream();
-                StreamReader Reader = new StreamReader(DataStream);
-                string ResponseContent = Reader.ReadToEnd();
-                return ResponseContent;
+                StreamReader Reader = new StreamReader(Response.GetResponseStream());
+                return Reader.ReadToEnd();
             }
-            catch (WebException ex) {
-                var resp = new StreamReader(ex.Response.GetResponseStream()).ReadToEnd();
-                return resp;
+            catch (WebException Ex) {
+                var ErrorBody = new StreamReader(Ex.Response.GetResponseStream()).ReadToEnd();
+                return ErrorBody;
             }
         }
         public static byte[] Decrypt(byte[] Data, byte[] Key)
         {
-            RijndaelManaged Unwrap = new RijndaelManaged();
-            Unwrap.Mode = CipherMode.ECB;
-            Unwrap.Key = Key;
-            Unwrap.Padding = PaddingMode.None;
+            RijndaelManaged Unwrap = new RijndaelManaged
+            {
+                Mode = CipherMode.ECB,
+                Key = Key,
+                Padding = PaddingMode.None
+            };
             var Decrypt = Unwrap.CreateDecryptor();
-            byte[] output = Decrypt.TransformFinalBlock(Data,0,16);
-            return output;
+            byte[] Out = Decrypt.TransformFinalBlock(Data,0,16);
+            return Out;
         }
-        public static byte[] GenerateAESKek(byte[] MasterKey, byte[] AESUsecaseSeed, byte[] DAuth_KEK, byte[] KEKEK)
+        public static byte[] GenerateAESKek(byte[] MasterKey, byte[] AESUseSrc, byte[] DAuth_KEK, byte[] DAuth_Src)
         {
-            byte[] GenAESKey = Decrypt(AESUsecaseSeed, MasterKey);
-            byte[] FirstKEK = Decrypt(DAuth_KEK, GenAESKey);
-            byte[] Final = Decrypt(KEKEK, FirstKEK);
-            return Final;
-        }
-        public static byte[] PostChallenge()
-        {
-            string Data = "key_generation=5";
-            return Encoding.UTF8.GetBytes(Data);
+            byte[] GenAESKey = Decrypt(AESUseSrc, MasterKey);
+            byte[] GenAESKek = Decrypt(DAuth_KEK, GenAESKey);
+            return Decrypt(DAuth_Src, GenAESKek);
         }
         public static string BuildRequestString(string Challenge)
         {
-            string Data = "challenge=" + Challenge + "&client_id=93af0acb26258de9&key_generation=5&system_version=gW93A#00050100#29uVhARHOdeTZmfdPnP785egrfRbPUW5n3IAACuHoPw=";
-            return Data;
+            return string.Format("challenge={0}&client_id={1}&key_generation={2}&system_version={3}", Challenge, Client_ID_NIM, 5, SysDigest);
         }
         public static string GenerateCMACOfRequestString(byte[] Key, string RequestData)
         {
-            byte[] CMAC = GenAESCMAC.AESCMAC(Key, Encoding.UTF8.GetBytes(RequestData));
-            string base64 = System.Convert.ToBase64String(CMAC).Replace('+', '-').Replace('/', '_').Replace("=","");
-            return base64;
+            return URLSafe(Convert.ToBase64String(GenAESCMAC.AESCMAC(Key, Encoding.UTF8.GetBytes(RequestData))));
         }
         public static byte[] PostAuthToken(string Data, string MAC)
         {
-            string BuildMAC = Data + "&mac=" + MAC;
-            byte[] byteArray = Encoding.UTF8.GetBytes(BuildMAC);
-            return byteArray;
+            return Encoding.UTF8.GetBytes(string.Format("{0}&mac={1}", Data, MAC));
         }
     }
 }

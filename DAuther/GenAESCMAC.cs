@@ -12,10 +12,11 @@ namespace DAuther
         {
             using (MemoryStream ms = new MemoryStream())
             {
-                AesCryptoServiceProvider aes = new AesCryptoServiceProvider();
-
-                aes.Mode = CipherMode.CBC;
-                aes.Padding = PaddingMode.None;
+                AesCryptoServiceProvider aes = new AesCryptoServiceProvider
+                {
+                    Mode = CipherMode.CBC,
+                    Padding = PaddingMode.None
+                };
 
                 using (CryptoStream cs = new CryptoStream(ms, aes.CreateEncryptor(key, iv), CryptoStreamMode.Write))
                 {
@@ -44,13 +45,13 @@ namespace DAuther
         {
             byte[] L = AESEncrypt(key, new byte[16], new byte[16]);
 
-            byte[] FirstSubkey = Rol(L);                    
+            byte[] FirstSubkey = Rol(L);
             if ((L[0] & 0x80) == 0x80)
-                FirstSubkey[15] ^= 0x87;                
+                FirstSubkey[15] ^= 0x87;
 
-            byte[] SecondSubkey = Rol(FirstSubkey);                     
+            byte[] SecondSubkey = Rol(FirstSubkey);
             if ((FirstSubkey[0] & 0x80) == 0x80)
-                SecondSubkey[15] ^= 0x87;                
+                SecondSubkey[15] ^= 0x87;
 
             if (((data.Length != 0) && (data.Length % 16 == 0)) == true)
             {
